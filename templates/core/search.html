@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+{% block page_heading %}Search{% endblock %}
+{% block content %}
+<div style="max-width:880px;margin:0 auto">
+  <form method="get" action="{% url 'search' %}" style="margin-bottom:24px">
+    <div style="display:flex;gap:10px">
+      <input type="text" name="q" value="{{ q }}" placeholder="Search teams, departments, people, meetings, messages..."
+             class="nx-input" style="flex:1;padding:14px 18px;font-size:15px" autofocus>
+      <button type="submit" class="btn-nx btn-nx-primary" style="padding:0 22px"><i class="fas fa-search"></i> Search</button>
+    </div>
+  </form>
+
+  {% if q %}
+    <p style="color:var(--nx-gray-500);font-size:13px;margin-bottom:18px">
+      {{ total }} result{{ total|pluralize }} for &ldquo;{{ q }}&rdquo;
+    </p>
+
+    {% if results.teams %}
+    <div class="nx-card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:12px;font-size:15px;color:var(--nx-gray-700)"><i class="fas fa-users" style="color:var(--nx-primary);margin-right:6px"></i>Teams ({{ results.teams|length }})</h3>
+      {% for t in results.teams %}
+      <a href="{% url 'teams' %}?q={{ t.name }}" style="display:block;padding:10px 12px;border-radius:8px;text-decoration:none;color:var(--nx-gray-800);transition:background 0.15s" onmouseover="this.style.background='var(--nx-primary-ghost)'" onmouseout="this.style.background='transparent'">
+        <strong>{{ t.name }}</strong>
+        {% if t.department %}<span style="font-size:11px;color:var(--nx-gray-400);margin-left:8px">{{ t.department.name }}</span>{% endif %}
+        <div style="font-size:12px;color:var(--nx-gray-500);margin-top:2px">{{ t.mission|default:t.description|truncatechars:120 }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if results.departments %}
+    <div class="nx-card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:12px;font-size:15px;color:var(--nx-gray-700)"><i class="fas fa-building" style="color:var(--nx-primary);margin-right:6px"></i>Departments ({{ results.departments|length }})</h3>
+      {% for d in results.departments %}
+      <a href="{% url 'departments' %}" style="display:block;padding:10px 12px;border-radius:8px;text-decoration:none;color:var(--nx-gray-800)">
+        <strong>{{ d.name }}</strong>
+        <div style="font-size:12px;color:var(--nx-gray-500);margin-top:2px">{{ d.description|truncatechars:140 }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if results.users %}
+    <div class="nx-card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:12px;font-size:15px;color:var(--nx-gray-700)"><i class="fas fa-user" style="color:var(--nx-primary);margin-right:6px"></i>People ({{ results.users|length }})</h3>
+      {% for u in results.users %}
+      <div style="padding:10px 12px;border-radius:8px;display:flex;align-items:center;gap:12px">
+        <div class="nx-avatar" style="width:34px;height:34px;font-size:12px">{{ u.first_name|slice:":1"|upper }}{{ u.last_name|slice:":1"|upper }}</div>
+        <div>
+          <strong>{{ u.get_full_name|default:u.username }}</strong>
+          <div style="font-size:12px;color:var(--nx-gray-500)">@{{ u.username }} &middot; {{ u.email }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if results.meetings %}
+    <div class="nx-card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:12px;font-size:15px;color:var(--nx-gray-700)"><i class="fas fa-calendar" style="color:var(--nx-primary);margin-right:6px"></i>Meetings ({{ results.meetings|length }})</h3>
+      {% for m in results.meetings %}
+      <a href="{% url 'schedule' %}" style="display:block;padding:10px 12px;border-radius:8px;text-decoration:none;color:var(--nx-gray-800)">
+        <strong>{{ m.title }}</strong>
+        <div style="font-size:12px;color:var(--nx-gray-500)">{{ m.date|date:"d M Y" }} {{ m.start_time|time:"H:i" }} &middot; {{ m.platform_display }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if results.messages %}
+    <div class="nx-card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:12px;font-size:15px;color:var(--nx-gray-700)"><i class="fas fa-envelope" style="color:var(--nx-primary);margin-right:6px"></i>Messages ({{ results.messages|length }})</h3>
+      {% for m in results.messages %}
+      <a href="{% url 'messages' %}" style="display:block;padding:10px 12px;border-radius:8px;text-decoration:none;color:var(--nx-gray-800)">
+        <strong>{{ m.subject }}</strong>
+        <div style="font-size:12px;color:var(--nx-gray-500)">From {{ m.sender.get_full_name|default:m.sender.username }} &middot; {{ m.created_at|date:"d M Y" }}</div>
+        <div style="font-size:12px;color:var(--nx-gray-400);margin-top:2px">{{ m.body|striptags|truncatechars:140 }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if total == 0 %}
+    <div class="nx-card" style="text-align:center;padding:50px 20px;color:var(--nx-gray-400)">
+      <i class="fas fa-search" style="font-size:36px;color:var(--nx-gray-300);margin-bottom:14px"></i>
+      <p>No results found for &ldquo;{{ q }}&rdquo;.</p>
+    </div>
+    {% endif %}
+  {% else %}
+  <div class="nx-card" style="text-align:center;padding:60px 20px;color:var(--nx-gray-400)">
+    <i class="fas fa-search" style="font-size:42px;color:var(--nx-gray-300);margin-bottom:16px"></i>
+    <h3 style="font-size:16px;color:var(--nx-gray-600);font-weight:600">Search across the portal</h3>
+    <p style="font-size:13px">Type a query to find teams, departments, people, meetings or messages.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
