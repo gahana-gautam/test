@@ -1,0 +1,1039 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Messages{% endblock %}
+{% block page_heading %}Messages{% endblock %}
+{% block topbar_search_placeholder %}Search messages, people...{% endblock %}
+
+{% block extra_head %}
+<style>
+.nx-content{padding:0!important;display:flex;height:calc(100vh - 88px);overflow:hidden}
+
+/* Popover (emoji + mention) */
+.nx-popover {
+  position: absolute; bottom: 90px; left: 20px; z-index: 50;
+  background: #fff; border: 1px solid var(--nx-gray-200);
+  border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  width: 300px; max-height: 280px; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.nx-popover.hidden { display: none; }
+.nx-popover-grid {
+  display: grid; grid-template-columns: repeat(8, 1fr);
+  gap: 4px; padding: 12px; overflow-y: auto;
+}
+.nx-popover-grid button {
+  background: transparent; border: none; cursor: pointer;
+  font-size: 20px; padding: 6px; border-radius: 8px;
+  transition: background 0.15s;
+}
+.nx-popover-grid button:hover { background: var(--nx-gray-100); }
+.nx-popover-search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-bottom: 1px solid var(--nx-gray-100);
+}
+.nx-popover-search i { color: var(--nx-gray-400); font-size: 13px; }
+.nx-popover-search input {
+  flex: 1; border: none; outline: none; font-size: 13px;
+  font-family: var(--nx-font);
+}
+.nx-popover-list { overflow-y: auto; max-height: 220px; padding: 6px; }
+.nx-popover-list-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 8px; cursor: pointer; transition: background 0.15s;
+}
+.nx-popover-list-item:hover { background: var(--nx-primary-ghost); }
+.nx-popover-list-av {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--nx-primary-pale); color: var(--nx-primary-dark);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; flex-shrink: 0;
+}
+.nx-popover-list-name { font-size: 13px; font-weight: 500; color: var(--nx-gray-800); }
+.nx-popover-list-meta { font-size: 11px; color: var(--nx-gray-400); }
+
+/* Attached files list */
+.nx-attach-list {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px;
+}
+.nx-attach-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 16px;
+  background: var(--nx-primary-ghost); color: var(--nx-primary-dark);
+  font-size: 12px; font-weight: 500;
+}
+.nx-attach-chip i { font-size: 11px; }
+.nx-attach-chip button {
+  background: transparent; border: none; color: var(--nx-primary-dark);
+  cursor: pointer; padding: 0 0 0 4px; font-size: 11px;
+}
+.nx-attach-chip button:hover { color: #991B1B; }
+
+.nx-msg-detail-panel { position: relative; }
+
+/* Rich text rendering inside chat input + thread bubbles */
+.nx-chat-input ul, .nx-chat-input ol,
+.nx-chat-msg-text ul, .nx-chat-msg-text ol {
+  padding-left: 22px;
+  margin: 4px 0;
+}
+.nx-chat-input ul, .nx-chat-msg-text ul { list-style: disc outside; }
+.nx-chat-input ol, .nx-chat-msg-text ol { list-style: decimal outside; }
+.nx-chat-input li, .nx-chat-msg-text li { margin: 2px 0; line-height: 1.5; }
+.nx-chat-input code, .nx-chat-msg-text code {
+  background: #F1F5F4; padding: 1px 6px; border-radius: 4px;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; color: #1B4332;
+}
+.nx-chat-input a, .nx-chat-msg-text a {
+  color: var(--nx-primary); text-decoration: underline;
+}
+.nx-chat-input s, .nx-chat-input strike,
+.nx-chat-msg-text s, .nx-chat-msg-text strike { text-decoration: line-through; }
+.nx-chat-input b, .nx-chat-input strong,
+.nx-chat-msg-text b, .nx-chat-msg-text strong { font-weight: 700; }
+.nx-chat-input i, .nx-chat-input em,
+.nx-chat-msg-text i, .nx-chat-msg-text em { font-style: italic; }
+
+/* Attachment chips inside thread messages */
+.nx-msg-attachments {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+}
+.nx-msg-attach {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 8px;
+  background: var(--nx-gray-50); border: 1px solid var(--nx-gray-200);
+  font-size: 12px; color: var(--nx-gray-700); text-decoration: none;
+  transition: background 0.15s;
+}
+.nx-msg-attach:hover { background: var(--nx-primary-ghost); border-color: var(--nx-primary-pale); color: var(--nx-primary-dark); }
+.nx-msg-attach i { font-size: 11px; color: var(--nx-primary); }
+.nx-msg-attach .size { color: var(--nx-gray-400); font-size: 11px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- ========== LEFT: Message List Panel ========== -->
+<div class="nx-msg-list-panel">
+
+  <!-- New Message Button with Dropdown -->
+  <div class="nx-msg-list-header">
+    <div class="nx-msg-new-wrap">
+      <button class="btn-nx btn-nx-primary btn-nx-block nx-msg-new-btn" onclick="toggleNewMsgDropdown()">
+        <i class="fas fa-pen-to-square"></i> New Message
+        <i class="fas fa-chevron-down nx-msg-new-arrow"></i>
+      </button>
+      <div class="nx-msg-new-dropdown" id="newMsgDropdown">
+        <button class="nx-msg-new-option" onclick="openCompose('group')">
+          <div class="nx-msg-new-option-icon group"><i class="fas fa-users"></i></div>
+          <div>
+            <div class="nx-msg-new-option-title">Group Message</div>
+            <div class="nx-msg-new-option-desc">Message multiple team members</div>
+          </div>
+        </button>
+        <button class="nx-msg-new-option" onclick="openCompose('direct')">
+          <div class="nx-msg-new-option-icon direct"><i class="fas fa-user"></i></div>
+          <div>
+            <div class="nx-msg-new-option-title">Direct Message</div>
+            <div class="nx-msg-new-option-desc">1:1 conversation with a colleague</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inbox / Sent / Drafts Tabs -->
+  <div class="nx-msg-tabs">
+    <button class="nx-msg-tab active" onclick="switchTab('inbox', this)">
+      <i class="fas fa-inbox"></i> Inbox {% if unread_count %}<span class="nx-msg-tab-badge">{{ unread_count }}</span>{% endif %}
+    </button>
+    <button class="nx-msg-tab" onclick="switchTab('sent', this)">
+      <i class="fas fa-paper-plane"></i> Sent
+    </button>
+    <button class="nx-msg-tab" onclick="switchTab('drafts', this)">
+      <i class="fas fa-file-pen"></i> Drafts
+    </button>
+  </div>
+
+  <!-- Search -->
+  <div class="nx-msg-search">
+    <i class="fas fa-search"></i>
+    <input type="text" placeholder="Search messages..." oninput="filterMessages(this.value)">
+  </div>
+
+  <!-- INBOX List -->
+  <div class="nx-msg-list" id="msgList-inbox">
+    {% for row in inbox_rows %}
+    <div class="nx-msg-convo {% if row.unread_count %}unread{% endif %} {% if forloop.first %}active{% endif %}" onclick="openConvo('inbox-{{ forloop.counter0 }}', this)" data-name="{{ row.msg.sender.get_full_name|default:row.msg.sender.username }}">
+      <div class="nx-msg-convo-avatar"><span>{{ row.msg.sender_initials }}</span></div>
+      <div class="nx-msg-convo-info">
+        <div class="nx-msg-convo-name">{{ row.msg.sender.get_full_name|default:row.msg.sender.username }}{% if row.unread_count %} <span class="nx-msg-convo-badge">{{ row.unread_count }}</span>{% endif %}</div>
+        <div class="nx-msg-convo-subject">{{ row.msg.subject }}</div>
+        <div class="nx-msg-convo-last">{{ row.msg.body|truncatechars:60 }}</div>
+      </div>
+      <div class="nx-msg-convo-time">{{ row.time_label }}</div>
+    </div>
+    {% empty %}
+    <div style="padding:24px;text-align:center;color:var(--nx-gray-400);font-size:13px">Your inbox is empty</div>
+    {% endfor %}
+  </div>
+
+  <!-- SENT List -->
+  <div class="nx-msg-list hidden" id="msgList-sent">
+    {% for row in sent_rows %}
+    <div class="nx-msg-convo" onclick="openConvo('sent-{{ forloop.counter0 }}', this)" data-name="{% if row.msg.recipient %}{{ row.msg.recipient.get_full_name|default:row.msg.recipient.username }}{% else %}{{ row.msg.recipient_team_name }}{% endif %}">
+      <div class="nx-msg-convo-avatar {% if row.msg.is_group %}group-av{% endif %}"><span>{% if row.msg.recipient %}{{ row.msg.recipient_initials }}{% else %}{{ row.msg.recipient_team_name|slice:":2"|upper }}{% endif %}</span></div>
+      <div class="nx-msg-convo-info">
+        <div class="nx-msg-convo-name">To: {% if row.msg.recipient %}{{ row.msg.recipient.get_full_name|default:row.msg.recipient.username }}{% else %}{{ row.msg.recipient_team_name }}{% endif %}</div>
+        <div class="nx-msg-convo-subject">{{ row.msg.subject }}</div>
+        <div class="nx-msg-convo-last">{{ row.msg.body|truncatechars:60 }}</div>
+      </div>
+      <div class="nx-msg-convo-time">{{ row.time_label }}</div>
+    </div>
+    {% empty %}
+    <div style="padding:24px;text-align:center;color:var(--nx-gray-400);font-size:13px">No sent messages</div>
+    {% endfor %}
+  </div>
+
+  <!-- DRAFTS List -->
+  <div class="nx-msg-list hidden" id="msgList-drafts">
+    {% for msg in drafts %}
+    <div class="nx-msg-convo draft" onclick="openConvo('draft-{{ forloop.counter0 }}', this)" data-name="Draft">
+      <div class="nx-msg-convo-avatar draft-av"><i class="fas fa-file-pen"></i></div>
+      <div class="nx-msg-convo-info">
+        <div class="nx-msg-convo-name">{{ msg.subject }}</div>
+        <div class="nx-msg-convo-subject">To: {% if msg.recipient %}{{ msg.recipient.get_full_name|default:msg.recipient.username }}{% else %}{{ msg.recipient_team_name|default:"(no recipient)" }}{% endif %}</div>
+        <div class="nx-msg-convo-last">{{ msg.body|truncatechars:60 }}</div>
+      </div>
+      <div class="nx-msg-convo-time">{{ msg.created_at|date:"d M" }}</div>
+    </div>
+    {% empty %}
+    <div style="padding:24px;text-align:center;color:var(--nx-gray-400);font-size:13px">No drafts</div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- ========== RIGHT: Chat / Detail Panel ========== -->
+<div class="nx-msg-detail-panel">
+
+  <!-- Chat View -->
+  <div id="chatView">
+    <div class="nx-chat-header">
+      <div class="nx-chat-header-left">
+        <div class="nx-chat-header-avatar" id="chatAvatar"><span>?</span></div>
+        <div>
+          <div class="nx-chat-header-name" id="chatName">-</div>
+          <div class="nx-chat-header-meta" id="chatMeta">-</div>
+        </div>
+      </div>
+      <div class="nx-chat-header-actions">
+        <button class="nx-chat-header-btn" title="Reply" onclick="openReplyForm()"><i class="fas fa-reply"></i></button>
+        <button class="nx-chat-header-btn" title="Forward" onclick="openForwardForm()"><i class="fas fa-share"></i></button>
+        <button class="nx-chat-header-btn" title="Delete" onclick="deleteConvo()"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>
+    <div class="nx-chat-subject-bar" id="chatSubjectBar">
+      <i class="fas fa-envelope"></i>
+      <span id="chatSubject">-</span>
+    </div>
+    <div class="nx-chat-thread" id="chatThread"></div>
+
+    <!-- Emoji + Mention popovers (anchor to input area) -->
+    <div id="emojiPicker" class="nx-popover hidden">
+      <div class="nx-popover-grid" id="emojiGrid"></div>
+    </div>
+    <div id="mentionPicker" class="nx-popover hidden">
+      <div class="nx-popover-search"><i class="fas fa-search"></i><input type="text" id="mentionSearch" placeholder="Search people..." oninput="filterMentions(this.value)"></div>
+      <div class="nx-popover-list" id="mentionList"></div>
+    </div>
+    <div id="attachList" class="nx-attach-list"></div>
+
+    <div class="nx-chat-input-area">
+      <div class="nx-chat-input-toolbar">
+        <button type="button" class="nx-chat-toolbar-btn" title="Bold" onmousedown="_saveSel(); event.preventDefault()" onclick="fmt('bold')"><i class="fas fa-bold"></i></button>
+        <button type="button" class="nx-chat-toolbar-btn" title="Italic" onmousedown="_saveSel(); event.preventDefault()" onclick="fmt('italic')"><i class="fas fa-italic"></i></button>
+        <button type="button" class="nx-chat-toolbar-btn" title="Strikethrough" onmousedown="_saveSel(); event.preventDefault()" onclick="fmt('strikeThrough')"><i class="fas fa-strikethrough"></i></button>
+        <button type="button" class="nx-chat-toolbar-btn" title="Code" onmousedown="_saveSel(); event.preventDefault()" onclick="fmtCode()"><i class="fas fa-code"></i></button>
+        <button type="button" class="nx-chat-toolbar-btn" title="Link" onmousedown="_saveSel(); event.preventDefault()" onclick="fmtLink()"><i class="fas fa-link"></i></button>
+        <div class="nx-chat-toolbar-sep"></div>
+        <button type="button" class="nx-chat-toolbar-btn" title="Ordered List" onmousedown="_saveSel(); event.preventDefault()" onclick="fmt('insertOrderedList')"><i class="fas fa-list-ol"></i></button>
+        <button type="button" class="nx-chat-toolbar-btn" title="Unordered List" onmousedown="_saveSel(); event.preventDefault()" onclick="fmt('insertUnorderedList')"><i class="fas fa-list-ul"></i></button>
+      </div>
+      <div class="nx-chat-input-row">
+        <div class="nx-chat-input" contenteditable="true" data-placeholder="Write a message..." id="chatInput"></div>
+      </div>
+      <div class="nx-chat-input-bottom">
+        <div class="nx-chat-input-actions">
+          <button type="button" class="nx-chat-action-btn" title="Emoji" onmousedown="_saveSel(); event.preventDefault()" onclick="toggleEmojiPicker(event)"><i class="fas fa-face-smile"></i></button>
+          <button type="button" class="nx-chat-action-btn" title="Mention" onmousedown="_saveSel(); event.preventDefault()" onclick="openMentionPicker(event)"><i class="fas fa-at"></i></button>
+          <button type="button" class="nx-chat-action-btn" title="Attach file" onclick="document.getElementById('chatAttachInput').click()"><i class="fas fa-paperclip"></i></button>
+          <input type="file" id="chatAttachInput" multiple style="display:none" onchange="onAttach(this)">
+          <button type="button" class="nx-chat-action-btn" title="Schedule meeting" onclick="window.location.href='{% url 'schedule' %}'"><i class="fas fa-calendar-plus"></i></button>
+        </div>
+        <button class="nx-chat-send-btn" onclick="sendChatMsg()" title="Send" id="sendBtn">
+          <i class="fas fa-paper-plane"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compose View -->
+  <div id="composeView" class="hidden">
+    <div class="nx-chat-header">
+      <div class="nx-chat-header-left">
+        <div class="nx-compose-type-icon" id="composeTypeIcon"><i class="fas fa-user"></i></div>
+        <div>
+          <div class="nx-chat-header-name" id="composeTitle">New Direct Message</div>
+          <div class="nx-chat-header-meta">Start a new conversation</div>
+        </div>
+      </div>
+      <button class="nx-chat-header-btn" onclick="closeCompose()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="nx-compose-form">
+      <div class="nx-compose-field">
+        <label><i class="fas fa-user-plus"></i> To</label>
+        <select id="composeRecipient" class="nx-compose-input" style="width:100%">
+          <option value="">-- Select recipient --</option>
+          {% for u in all_users %}
+          <option value="{{ u.pk }}">{{ u.get_full_name|default:u.username }} ({{ u.email|default:u.username }})</option>
+          {% endfor %}
+        </select>
+        <input type="text" id="composeToGroup" class="nx-compose-input" placeholder="Group / team name..." style="display:none;margin-top:8px">
+        <div class="nx-compose-hint">Choose a colleague or enter a group name</div>
+      </div>
+      <div class="nx-compose-field" id="composeSubjectField">
+        <label><i class="fas fa-heading"></i> Subject</label>
+        <input type="text" placeholder="What's this about?" id="composeSubject" class="nx-compose-input" maxlength="200">
+      </div>
+      <div class="nx-compose-field">
+        <label><i class="fas fa-message"></i> Message</label>
+        <textarea placeholder="Write your message..." id="composeBody" class="nx-compose-textarea" rows="8" maxlength="5000" oninput="updateComposeCount()"></textarea>
+        <div class="nx-compose-field-footer">
+          <span class="nx-msg-char-count"><span id="composeCharCount">0</span> / 5000</span>
+        </div>
+      </div>
+      <div class="nx-compose-actions">
+        <button class="btn-nx btn-nx-primary" style="border-radius:10px;padding:11px 28px" onclick="sendNewMessage()">
+          <i class="fas fa-paper-plane"></i> Send Message
+        </button>
+        <button class="btn-nx btn-nx-outline" style="border-radius:10px" onclick="saveDraft()">
+          <i class="fas fa-file-pen"></i> Save as Draft
+        </button>
+        <button class="btn-nx btn-nx-ghost" onclick="closeCompose()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty State -->
+  <div id="emptyState" class="hidden">
+    <div class="nx-msg-empty">
+      <div class="nx-msg-empty-icon">
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+          <rect x="8" y="16" width="64" height="48" rx="12" fill="#D8F3DC"/>
+          <rect x="16" y="24" width="48" height="32" rx="8" fill="#B7E4C7"/>
+          <circle cx="32" cy="40" r="4" fill="#2D6A4F"/>
+          <circle cx="44" cy="40" r="4" fill="#2D6A4F"/>
+          <circle cx="56" cy="40" r="4" fill="#2D6A4F"/>
+        </svg>
+      </div>
+      <h3>Select a conversation</h3>
+      <p>Choose from your inbox, sent messages, or drafts — or start a new one</p>
+      <button class="btn-nx btn-nx-primary" style="border-radius:10px;margin-top:8px" onclick="toggleNewMsgDropdown()">
+        <i class="fas fa-pen-to-square"></i> New Message
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const messageData = {{ message_data_json|safe }};
+let currentConvo = null;
+
+function escapeHtml(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ===== RICH TEXT FORMATTING =====
+let _savedRange = null;
+
+function _saveSel(){
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const r = sel.getRangeAt(0);
+  const inp = document.getElementById('chatInput');
+  if (!inp) return;
+  // Only save selections that live inside chatInput
+  const node = r.commonAncestorContainer;
+  if (inp === node || inp.contains(node)) {
+    _savedRange = r.cloneRange();
+  }
+}
+
+function _restoreSel(){
+  if (!_savedRange) return false;
+  const inp = document.getElementById('chatInput');
+  if (!inp.contains(_savedRange.startContainer)) return false;
+  try {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(_savedRange);
+    return true;
+  } catch(e) { return false; }
+}
+
+// Walk up from current selection, return ancestor matching tag (or null)
+function _findAncestor(tagName){
+  const sel = window.getSelection();
+  if (!sel || !sel.anchorNode) return null;
+  const inp = document.getElementById('chatInput');
+  let el = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+  while (el && el !== inp) {
+    if (el.tagName && el.tagName.toLowerCase() === tagName.toLowerCase()) return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
+function _unwrap(el){
+  const parent = el.parentNode;
+  while (el.firstChild) parent.insertBefore(el.firstChild, el);
+  parent.removeChild(el);
+}
+
+// Run a formatting action with the saved selection restored
+function _withSel(fn){
+  const inp = document.getElementById('chatInput');
+  inp.focus();
+  _restoreSel();
+  fn();
+  _saveSel();
+  refreshToolbarState();
+  updateSendActive();
+}
+
+function fmt(cmd){
+  _withSel(() => {
+    try { document.execCommand(cmd, false, null); } catch(e){}
+  });
+}
+
+const CODE_STYLE = 'background:#F1F5F4;padding:1px 6px;border-radius:4px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.92em;color:#1B4332';
+
+function fmtCode(){
+  _withSel(() => {
+    // Toggle: if cursor inside <code>, unwrap
+    const existing = _findAncestor('code');
+    if (existing) { _unwrap(existing); return; }
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) {
+      // Insert empty code with caret inside
+      try {
+        document.execCommand('insertHTML', false,
+          '<code style="' + CODE_STYLE + '">​</code> ');
+      } catch(e){}
+      return;
+    }
+    // Wrap selected text in <code>
+    const text = sel.toString();
+    try {
+      document.execCommand('insertHTML', false,
+        '<code style="' + CODE_STYLE + '">' + escapeHtml(text) + '</code>');
+    } catch(e){}
+  });
+}
+
+function updateSendActive(){
+  const inp = document.getElementById('chatInput');
+  const has = (inp.innerText || '').trim().length > 0;
+  document.getElementById('sendBtn').classList.toggle('active', has);
+}
+
+// ===== EMOJI PICKER =====
+const EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😎','🤔','😴','🙄','😬','😅','😇','🥳','🔥','💯','✅','❌','👍','👎','👏','🙌','💪','🎉','🚀','💡','📌','📅','⏰','📝','💬','📎','🔗','⭐','🎯','🐛','🛠️','⚙️','🧩','💻','📊','📈','📉','✨','❤️','💚','💙','💜','🥲','🤝','👀','🙏','😢','😭','😡','😱','🤯','🤩','😋'];
+
+function toggleEmojiPicker(e){
+  e.stopPropagation();
+  const dd = document.getElementById('emojiPicker');
+  const grid = document.getElementById('emojiGrid');
+  if (!grid.children.length) {
+    grid.innerHTML = EMOJIS.map(em => `<button type="button" onmousedown="_saveSel(); event.preventDefault()" onclick="insertEmoji('${em}')">${em}</button>`).join('');
+  }
+  document.getElementById('mentionPicker').classList.add('hidden');
+  dd.classList.toggle('hidden');
+}
+
+function insertEmoji(em){
+  _withSel(() => {
+    try { document.execCommand('insertText', false, em); } catch(e){}
+  });
+  document.getElementById('emojiPicker').classList.add('hidden');
+}
+
+// ===== MENTION PICKER =====
+const ALL_USERS = {{ all_users_for_mention|safe }};
+
+function openMentionPicker(e){
+  e.stopPropagation();
+  const dd = document.getElementById('mentionPicker');
+  document.getElementById('emojiPicker').classList.add('hidden');
+  renderMentionList(ALL_USERS);
+  document.getElementById('mentionSearch').value = '';
+  dd.classList.remove('hidden');
+  setTimeout(() => document.getElementById('mentionSearch').focus(), 50);
+}
+
+function renderMentionList(users){
+  const list = document.getElementById('mentionList');
+  list.innerHTML = users.slice(0, 30).map(u =>
+    `<div class="nx-popover-list-item" onmousedown="_saveSel(); event.preventDefault()" onclick="insertMention('${escapeAttr(u.name)}', '${u.username}')">
+      <div class="nx-popover-list-av">${u.initials}</div>
+      <div>
+        <div class="nx-popover-list-name">${u.name}</div>
+        <div class="nx-popover-list-meta">@${u.username}</div>
+      </div>
+    </div>`
+  ).join('');
+  if (users.length === 0) {
+    list.innerHTML = '<div style="padding:14px;text-align:center;color:var(--nx-gray-400);font-size:12px">No matches</div>';
+  }
+}
+
+function escapeAttr(s){ return String(s||'').replace(/'/g, "\\'").replace(/"/g, '\\"'); }
+
+function filterMentions(q){
+  const lq = (q||'').toLowerCase();
+  const filtered = ALL_USERS.filter(u =>
+    u.name.toLowerCase().includes(lq) || u.username.toLowerCase().includes(lq)
+  );
+  renderMentionList(filtered);
+}
+
+function insertMention(name, username){
+  _withSel(() => {
+    try {
+      document.execCommand('insertHTML', false,
+        `<span style="background:var(--nx-primary-ghost);color:var(--nx-primary-dark);padding:1px 6px;border-radius:4px;font-weight:500" contenteditable="false">@${escapeHtml(name)}</span>&nbsp;`);
+    } catch(e){}
+  });
+  document.getElementById('mentionPicker').classList.add('hidden');
+}
+
+// ===== ATTACH FILES =====
+const _attachedFiles = [];
+function onAttach(input){
+  Array.from(input.files || []).forEach(f => _attachedFiles.push(f));
+  input.value = '';
+  renderAttached();
+  updateSendActive();
+}
+function renderAttached(){
+  const wrap = document.getElementById('attachList');
+  if (_attachedFiles.length === 0) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = _attachedFiles.map((f, i) => {
+    const sizeKB = (f.size / 1024).toFixed(1);
+    return `<div class="nx-attach-chip"><i class="fas fa-paperclip"></i><span>${escapeHtml(f.name)}</span><span style="opacity:0.7;font-size:10px">${sizeKB}KB</span><button type="button" onclick="removeAttached(${i})"><i class="fas fa-times"></i></button></div>`;
+  }).join('');
+}
+function removeAttached(i){
+  _attachedFiles.splice(i, 1);
+  renderAttached();
+  updateSendActive();
+}
+
+// ===== LINK =====
+function fmtLink(){
+  const sel = window.getSelection();
+  const hasSelection = sel && sel.rangeCount && !sel.getRangeAt(0).collapsed;
+  const selText = hasSelection ? sel.toString() : '';
+  const url = window.prompt('Link URL:', 'https://');
+  if (!url || url === 'https://') return;
+  const safeUrl = /^(https?|mailto|tel):/i.test(url) ? url : 'https://' + url.replace(/^\/+/, '');
+  _withSel(() => {
+    try {
+      const label = selText || safeUrl;
+      document.execCommand('insertHTML', false,
+        `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--nx-primary);text-decoration:underline">${escapeHtml(label)}</a>`);
+    } catch(e){}
+  });
+}
+
+// Close popovers on outside click
+document.addEventListener('click', function(e){
+  if (!e.target.closest('#emojiPicker') && !e.target.closest('[title="Emoji"]')) {
+    const ep = document.getElementById('emojiPicker'); if (ep) ep.classList.add('hidden');
+  }
+  if (!e.target.closest('#mentionPicker') && !e.target.closest('[title="Mention"]')) {
+    const mp = document.getElementById('mentionPicker'); if (mp) mp.classList.add('hidden');
+  }
+});
+
+function refreshToolbarState(){
+  const map = {Bold:'bold', Italic:'italic', Strikethrough:'strikeThrough', 'Ordered List':'insertOrderedList', 'Unordered List':'insertUnorderedList'};
+  document.querySelectorAll('.nx-chat-toolbar-btn').forEach(b => {
+    const t = b.title;
+    if (map[t]) {
+      try { b.classList.toggle('active', document.queryCommandState(map[t])); } catch(e){}
+    }
+  });
+  // Code: detect via ancestor walk (no execCommand for it)
+  const codeAncestor = _findAncestor('code');
+  document.querySelectorAll('.nx-chat-toolbar-btn').forEach(b => {
+    if (b.title === 'Code') b.classList.toggle('active', !!codeAncestor);
+  });
+}
+
+function renderThread(convoId) {
+  const data = messageData[convoId];
+  if (!data) return;
+  const thread = document.getElementById('chatThread');
+  let html = '';
+  let lastDate = '';
+  data.messages.forEach(msg => {
+    const dateStr = msg.time.split(',')[0];
+    if (dateStr !== lastDate) {
+      html += `<div class="nx-chat-date-sep"><span>${escapeHtml(dateStr)}</span></div>`;
+      lastDate = dateStr;
+    }
+    const isMe = msg.me ? ' me' : '';
+    const avatarClass = msg.me ? 'me-av' : '';
+    const draftTag = msg.draft ? '<span class="nx-chat-draft-tag">DRAFT</span>' : '';
+    // If body contains rich tags, sanitize and render as HTML; otherwise escape and convert newlines.
+    const looksRich = /<\/?(b|strong|i|em|u|s|strike|code|ul|ol|li|br|a|span|div|p)\b/i.test(msg.text || '');
+    const safeBody = looksRich ? sanitizeRich(msg.text) : escapeHtml(msg.text).replace(/\n/g, '<br>');
+    const attHTML = renderAttachmentsHTML(msg.attachments || []);
+    html += `
+      <div class="nx-chat-msg${isMe}">
+        <div class="nx-chat-msg-avatar ${avatarClass}"><span>${escapeHtml(msg.initials)}</span></div>
+        <div class="nx-chat-msg-content">
+          <div class="nx-chat-msg-header">
+            <span class="nx-chat-msg-name">${escapeHtml(msg.from)}</span>
+            <span class="nx-chat-msg-time">${escapeHtml(msg.time)}</span>
+            ${draftTag}
+          </div>
+          <div class="nx-chat-msg-text">${safeBody}</div>
+          ${attHTML}
+        </div>
+      </div>`;
+  });
+  thread.innerHTML = html;
+  thread.scrollTop = thread.scrollHeight;
+
+  document.getElementById('chatName').textContent = data.name;
+  document.getElementById('chatMeta').textContent = (data.email || '') + (data.team ? ' · ' + data.team : '');
+  document.getElementById('chatSubject').textContent = data.subject;
+  document.getElementById('chatAvatar').innerHTML = '<span>' + escapeHtml(data.initials) + '</span>';
+  document.getElementById('chatAvatar').className = 'nx-chat-header-avatar' + (data.isGroup ? ' group-av' : '');
+}
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.nx-msg-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nx-msg-list').forEach(l => l.classList.add('hidden'));
+  btn.classList.add('active');
+  document.getElementById('msgList-' + tab).classList.remove('hidden');
+  document.querySelectorAll('.nx-msg-convo').forEach(c => c.classList.remove('active'));
+  document.getElementById('chatView').classList.add('hidden');
+  document.getElementById('composeView').classList.add('hidden');
+  document.getElementById('emptyState').classList.remove('hidden');
+}
+
+function openConvo(id, el) {
+  currentConvo = id;
+  document.querySelectorAll('.nx-msg-convo').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  el.classList.remove('unread');
+  const badge = el.querySelector('.nx-msg-convo-badge');
+  if (badge) badge.remove();
+  if (!messageData[id]) return;
+  const data = messageData[id];
+  // Drafts open the compose form prefilled, ready to edit + send.
+  if (data.kind === 'draft') {
+    openDraftEdit(data);
+    return;
+  }
+  document.getElementById('chatView').classList.remove('hidden');
+  document.getElementById('composeView').classList.add('hidden');
+  document.getElementById('emptyState').classList.add('hidden');
+  // Mark as read on the server (only inbox conversations have a real msg id)
+  if (data.serverId && data.kind === 'inbox') {
+    fetch('/messaging/' + data.serverId + '/detail/').catch(()=>{});
+  }
+  renderThread(id);
+}
+
+let _composeDraftId = null;
+
+function openDraftEdit(data) {
+  document.getElementById('chatView').classList.add('hidden');
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('composeView').classList.remove('hidden');
+  const icon = document.getElementById('composeTypeIcon');
+  const title = document.getElementById('composeTitle');
+  const sel = document.getElementById('composeRecipient');
+  const grp = document.getElementById('composeToGroup');
+  if (data.isGroup) {
+    icon.innerHTML = '<i class="fas fa-users"></i>';
+    icon.className = 'nx-compose-type-icon group';
+    title.textContent = 'Edit Draft — Group';
+    sel.style.display = 'none';
+    grp.style.display = 'block';
+    grp.value = data.name || '';
+    sel.value = '';
+  } else {
+    icon.innerHTML = '<i class="fas fa-user"></i>';
+    icon.className = 'nx-compose-type-icon';
+    title.textContent = 'Edit Draft';
+    sel.style.display = 'block';
+    grp.style.display = 'none';
+    grp.value = '';
+    // Find recipient option matching the name; fall back to first match by username/email
+    let chosen = '';
+    const tgt = (data.name || '').toLowerCase();
+    Array.from(sel.options).forEach(opt => {
+      if (!chosen && opt.textContent.toLowerCase().startsWith(tgt) && tgt) chosen = opt.value;
+    });
+    sel.value = chosen;
+  }
+  document.getElementById('composeSubject').value = data.subject || '';
+  // Drafts may have HTML body; strip tags for textarea editing
+  const bodyText = (data.messages && data.messages[0] && data.messages[0].text) || '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = bodyText;
+  document.getElementById('composeBody').value = tmp.textContent || tmp.innerText || '';
+  updateComposeCount();
+  _composeDraftId = data.serverId || null;
+}
+
+function toggleNewMsgDropdown() {
+  const dd = document.getElementById('newMsgDropdown');
+  dd.classList.toggle('show');
+  setTimeout(() => {
+    document.addEventListener('click', function handler(e) {
+      if (!e.target.closest('.nx-msg-new-wrap')) {
+        dd.classList.remove('show');
+        document.removeEventListener('click', handler);
+      }
+    });
+  }, 10);
+}
+
+function openCompose(type) {
+  document.getElementById('newMsgDropdown').classList.remove('show');
+  document.getElementById('composeView').classList.remove('hidden');
+  document.getElementById('chatView').classList.add('hidden');
+  document.getElementById('emptyState').classList.add('hidden');
+  document.querySelectorAll('.nx-msg-convo').forEach(c => c.classList.remove('active'));
+
+  const icon = document.getElementById('composeTypeIcon');
+  const title = document.getElementById('composeTitle');
+  const sel = document.getElementById('composeRecipient');
+  const grp = document.getElementById('composeToGroup');
+
+  if (type === 'group') {
+    icon.innerHTML = '<i class="fas fa-users"></i>';
+    icon.className = 'nx-compose-type-icon group';
+    title.textContent = 'New Group Message';
+    sel.style.display = 'none';
+    grp.style.display = 'block';
+  } else {
+    icon.innerHTML = '<i class="fas fa-user"></i>';
+    icon.className = 'nx-compose-type-icon';
+    title.textContent = 'New Direct Message';
+    sel.style.display = 'block';
+    grp.style.display = 'none';
+  }
+  sel.value = '';
+  grp.value = '';
+  document.getElementById('composeSubject').value = '';
+  document.getElementById('composeBody').value = '';
+  document.getElementById('composeCharCount').textContent = '0';
+  _composeDraftId = null;
+}
+
+function _composeIsDirty() {
+  const subj = (document.getElementById('composeSubject').value || '').trim();
+  const body = (document.getElementById('composeBody').value || '').trim();
+  return subj.length > 0 || body.length > 0;
+}
+
+function closeCompose() {
+  if (_composeIsDirty()) {
+    if (!confirm("Discard this message? You'll lose what you've written.")) return;
+  }
+  document.getElementById('composeView').classList.add('hidden');
+  _composeDraftId = null;
+  if (currentConvo && messageData[currentConvo] && messageData[currentConvo].kind !== 'draft') {
+    document.getElementById('chatView').classList.remove('hidden');
+  } else {
+    document.getElementById('emptyState').classList.remove('hidden');
+  }
+}
+
+let _composeBusy = false;
+
+function postCompose(asDraft) {
+  if (_composeBusy) return;
+  const body = document.getElementById('composeBody').value.trim();
+  if (!body) { showToast('Write something first', 'error'); return; }
+  const sel = document.getElementById('composeRecipient');
+  const grp = document.getElementById('composeToGroup');
+  const fd = new FormData();
+  if (grp.style.display !== 'none') {
+    if (!grp.value.trim()) { showToast('Enter a group name', 'error'); return; }
+    fd.append('recipient_name', grp.value.trim());
+    fd.append('is_group', '1');
+  } else {
+    if (!sel.value) { showToast('Select a recipient', 'error'); return; }
+    fd.append('recipient_id', sel.value);
+  }
+  const subjectVal = document.getElementById('composeSubject').value.trim();
+  if (!asDraft && !subjectVal) { showToast('Subject is required', 'error'); return; }
+  fd.append('subject', subjectVal || (asDraft ? '(Draft)' : ''));
+  fd.append('body', body);
+  if (asDraft) fd.append('save_draft', '1');
+  if (_composeDraftId) fd.append('draft_id', _composeDraftId);
+  fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+  _composeBusy = true;
+  fetch('{% url "send_message" %}', {method:'POST', body:fd, headers:{'X-CSRFToken':'{{ csrf_token }}'}})
+    .then(r => r.json()).then(d => {
+      _composeBusy = false;
+      if (d.success) {
+        // Skip the discard-confirm because we just sent/saved successfully
+        document.getElementById('composeView').classList.add('hidden');
+        _composeDraftId = null;
+        document.getElementById('composeSubject').value = '';
+        document.getElementById('composeBody').value = '';
+        showToast(asDraft ? 'Draft saved!' : 'Message sent successfully!');
+        setTimeout(()=>location.reload(), 600);
+      }
+      else { showToast(d.error || 'Could not send', 'error'); }
+    }).catch(() => { _composeBusy = false; });
+}
+function sendNewMessage() { postCompose(false); }
+function saveDraft() { postCompose(true); }
+function updateComposeCount() {
+  document.getElementById('composeCharCount').textContent = document.getElementById('composeBody').value.length;
+}
+
+// Allow safe inline formatting tags + anchor + mention span. Strip everything else.
+function sanitizeRich(html){
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  const ALLOWED = new Set(['B','STRONG','I','EM','U','S','STRIKE','CODE','UL','OL','LI','BR','DIV','SPAN','P','A']);
+  const STYLE_ALLOWED = new Set(['CODE', 'SPAN', 'A']);
+  function walk(node){
+    [...node.childNodes].forEach(child => {
+      if (child.nodeType === 1) {
+        if (!ALLOWED.has(child.tagName)) {
+          while (child.firstChild) node.insertBefore(child.firstChild, child);
+          node.removeChild(child);
+          return;
+        }
+        // Strip event handlers and dangerous attrs
+        [...child.attributes].forEach(a => {
+          const n = a.name.toLowerCase();
+          if (n.startsWith('on')) child.removeAttribute(a.name);
+          if (n === 'src') child.removeAttribute(a.name);
+          if (n === 'style' && !STYLE_ALLOWED.has(child.tagName)) child.removeAttribute(a.name);
+          if (n === 'href') {
+            const v = (a.value || '').trim().toLowerCase();
+            if (!/^(https?:|mailto:|tel:|\/|#)/.test(v)) child.removeAttribute(a.name);
+          }
+          if (n === 'target' && child.tagName === 'A') child.setAttribute('target', '_blank');
+          if (n === 'contenteditable') child.removeAttribute(a.name);
+        });
+        if (child.tagName === 'A') {
+          child.setAttribute('rel', 'noopener noreferrer');
+          if (!child.getAttribute('target')) child.setAttribute('target', '_blank');
+        }
+        walk(child);
+      } else if (child.nodeType !== 3) {
+        node.removeChild(child);
+      }
+    });
+  }
+  walk(tpl.content);
+  return tpl.innerHTML.trim();
+}
+
+function sendChatMsg() {
+  const input = document.getElementById('chatInput');
+  const plain = input.innerText.trim();
+  const hasFiles = _attachedFiles.length > 0;
+  if ((!plain && !hasFiles) || !currentConvo) return;
+  const html = plain ? sanitizeRich(input.innerHTML) : '';
+  const data = messageData[currentConvo];
+  if (!data || !data.serverId) {
+    appendLocalMsg(html, _attachedFiles.map(f => ({name: f.name, url: '', size: f.size})));
+    input.innerHTML = '';
+    _attachedFiles.length = 0;
+    renderAttached();
+    document.getElementById('sendBtn').classList.remove('active');
+    return;
+  }
+  const fd = new FormData();
+  fd.append('subject', data.subject);
+  fd.append('body', html);
+  fd.append('content_type', 'html');
+  fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+  _attachedFiles.forEach(f => fd.append('attachments', f, f.name));
+  fetch('/messaging/' + data.serverId + '/reply/', {method:'POST', body:fd, headers:{'X-CSRFToken':'{{ csrf_token }}'}})
+    .then(r => r.json()).then(d => {
+      if (d.success) {
+        appendLocalMsg(html, d.attachments || []);
+        input.innerHTML = '';
+        _attachedFiles.length = 0;
+        renderAttached();
+        document.getElementById('sendBtn').classList.remove('active');
+      } else {
+        showToast(d.error || 'Could not send', 'error');
+      }
+    });
+}
+
+function renderAttachmentsHTML(atts){
+  if (!atts || atts.length === 0) return '';
+  return '<div class="nx-msg-attachments">' + atts.map(a => {
+    const sizeKB = (a.size / 1024).toFixed(1);
+    if (a.url) {
+      return `<a class="nx-msg-attach" href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer">
+        <i class="fas fa-paperclip"></i><span>${escapeHtml(a.name)}</span><span class="size">${sizeKB}KB</span>
+      </a>`;
+    }
+    return `<span class="nx-msg-attach"><i class="fas fa-paperclip"></i><span>${escapeHtml(a.name)}</span><span class="size">${sizeKB}KB</span></span>`;
+  }).join('') + '</div>';
+}
+
+function appendLocalMsg(html, atts) {
+  const thread = document.getElementById('chatThread');
+  const now = new Date();
+  const day = now.toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
+  const tm = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const me = '{{ me_initials }}';
+  const msgEl = document.createElement('div');
+  msgEl.className = 'nx-chat-msg me nx-chat-msg-enter';
+  msgEl.innerHTML = `
+    <div class="nx-chat-msg-avatar me-av"><span>${me}</span></div>
+    <div class="nx-chat-msg-content">
+      <div class="nx-chat-msg-header">
+        <span class="nx-chat-msg-name">You</span>
+        <span class="nx-chat-msg-time">${day}, ${tm}</span>
+      </div>
+      <div class="nx-chat-msg-text" data-rich="1"></div>
+      <div class="nx-chat-msg-attachments-slot"></div>
+    </div>`;
+  msgEl.querySelector('.nx-chat-msg-text').innerHTML = sanitizeRich(html || '');
+  msgEl.querySelector('.nx-chat-msg-attachments-slot').innerHTML = renderAttachmentsHTML(atts);
+  thread.appendChild(msgEl);
+  thread.scrollTop = thread.scrollHeight;
+  setTimeout(() => msgEl.classList.remove('nx-chat-msg-enter'), 300);
+}
+
+const chatInput = document.getElementById('chatInput');
+if (chatInput) {
+  chatInput.addEventListener('input', function(){ _saveSel(); updateSendActive(); });
+  chatInput.addEventListener('keyup', function(){ _saveSel(); refreshToolbarState(); });
+  chatInput.addEventListener('mouseup', function(){ _saveSel(); refreshToolbarState(); });
+  chatInput.addEventListener('blur', _saveSel);
+  document.addEventListener('selectionchange', function(){
+    if (document.activeElement === chatInput) { _saveSel(); refreshToolbarState(); }
+  });
+  chatInput.addEventListener('keydown', function(e) {
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && (e.key === 'b' || e.key === 'B')) { e.preventDefault(); fmt('bold'); refreshToolbarState(); return; }
+    if (ctrl && (e.key === 'i' || e.key === 'I')) { e.preventDefault(); fmt('italic'); refreshToolbarState(); return; }
+    if (ctrl && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); fmt('underline'); refreshToolbarState(); return; }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMsg(); }
+  });
+  // Strip formatting on paste so users don't dump styled HTML from external sites
+  chatInput.addEventListener('paste', function(e){
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
+}
+
+function filterMessages(query) {
+  const q = query.toLowerCase();
+  const activeList = document.querySelector('.nx-msg-list:not(.hidden)');
+  if (!activeList) return;
+  activeList.querySelectorAll('.nx-msg-convo').forEach(el => {
+    const text = el.textContent.toLowerCase();
+    el.style.display = text.includes(q) ? 'flex' : 'none';
+  });
+}
+
+function openReplyForm(){
+  if (!currentConvo) return;
+  const data = messageData[currentConvo];
+  if (!data || !data.serverId) return;
+  window.location.href = "{% url 'messages' %}?reply=" + data.serverId;
+}
+function openForwardForm(){
+  if (!currentConvo) return;
+  const data = messageData[currentConvo];
+  if (!data || !data.serverId) return;
+  window.location.href = "{% url 'messages' %}?forward=" + data.serverId;
+}
+
+function deleteConvo() {
+  if (!currentConvo) return;
+  const data = messageData[currentConvo];
+  if (!data || !data.serverId) { showToast('Nothing to delete'); return; }
+  if (!confirm('Delete this conversation?')) return;
+  const fd = new FormData(); fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+  fetch('/messaging/' + data.serverId + '/delete/', {method:'POST', body:fd, headers:{'X-CSRFToken':'{{ csrf_token }}'}})
+    .then(() => location.reload());
+}
+
+function showToast(msg, type) {
+  const toast = document.createElement('div');
+  toast.className = 'nx-toast ' + (type === 'error' ? 'nx-toast-error' : 'nx-toast-success');
+  toast.innerHTML = '<i class="fas fa-' + (type === 'error' ? 'exclamation-circle' : 'check-circle') + '"></i> ' + msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+// Prefill state from URL params
+const _prefillTeam = {{ prefill_team|safe }};
+const _prefillRecipients = {{ prefill_recipient_ids|safe }};
+const _prefillMode = "{{ prefill_mode|escapejs }}";
+const _prefillSubject = "{{ prefill_subject|escapejs }}";
+const _prefillBody = "{{ prefill_body|escapejs }}";
+const _prefillSingleRecipient = "{{ prefill_single_recipient|escapejs }}";
+
+function applyPrefill(){
+  if (_prefillTeam) {
+    // Open group compose with team name + auto-CC all members
+    openCompose('group');
+    document.getElementById('composeToGroup').value = _prefillTeam.name;
+    document.getElementById('composeSubject').value = _prefillTeam.subject;
+    return true;
+  }
+  if (_prefillMode === 'reply' || _prefillMode === 'forward') {
+    openCompose('direct');
+    document.getElementById('composeSubject').value = _prefillSubject;
+    document.getElementById('composeBody').value = _prefillBody;
+    if (_prefillSingleRecipient) {
+      const sel = document.getElementById('composeRecipient');
+      sel.value = String(_prefillSingleRecipient);
+    }
+    document.getElementById('composeCharCount').textContent = _prefillBody.length;
+    return true;
+  }
+  return false;
+}
+
+if (!applyPrefill()) {
+  const firstConvo = document.querySelector('.nx-msg-convo.active');
+  if (firstConvo && messageData['inbox-0']) {
+    openConvo('inbox-0', firstConvo);
+  } else {
+    document.getElementById('chatView').classList.add('hidden');
+    document.getElementById('emptyState').classList.remove('hidden');
+  }
+}
+</script>
+{% endblock %}
